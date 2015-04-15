@@ -6,6 +6,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <assert.h>
 #include <Mocap/mocap_comm.h>
 #include <Mocap/mocap_frame.h>
 #include <matVec/matVec.h>
@@ -17,13 +18,17 @@ class ObjectReg {
   void Serialize(std::ostream& fout);
   void Deserialize(std::istream& fin);
 
-  void ReadCaliMarkersFromMocap(const MocapComm& mocap_comm);
-  void ReadTractablePoseFromMocap(const MocapComm& mocap_comm);
+  void ReadCaliMarkersFromMocap(MocapComm& mocap_comm);
+  void ReadTractablePoseFromMocap(MocapComm& mocap_comm);
   
   void ComputeTransformation();
 
  private:
+  // Compute the tf_robot_calimarkers from calibration marker point mocap readings.
+  void FormCaliMarkerCoordinateFrame();
+  
   std::vector<Vec> cali_markers_pos;
+
   // Transformation from robot base to motion capture tractable.
   HomogTransf tf_robot_mctractable;
 
