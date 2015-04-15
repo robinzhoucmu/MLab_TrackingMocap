@@ -4,9 +4,53 @@ ObjectReg::ObjectReg() {
 }
 
 void ObjectReg::Serialize(std::ostream & fout) {
+  // First 3 lines of cali marker positions.
+  for (int i = 0; i < 3; ++i) {
+    const Vec& p = cali_markers_pos[i];
+    for (int j = 0; j < 3; ++j ) {
+      fout << p[j] << " ";
+    }
+    fout << std::endl;
+  }
+  // Serialize relevant homogenious transformations.
+  SerializeHomog(fout, tf_robot_mctractable);
+  SerializeHomog(fout, tf_robot_calimarkers);
+  SerializeHomog(fout, tf_mctractable_obj);
 }
 
 void ObjectReg::Deserialize(std::istream& fin) {
+  // Deserialize vector of cali marker positions.
+  cali_markers_pos.clear();
+  for (int i = 0; i < 3; ++i) {
+    Vec p(3);
+    for (int j = 0; j < 3; ++j) {
+      fin >> p[j];
+    }
+    cali_markers_pos.push_back(p);
+  }
+  DeserializeHomog(fin, &tf_robot_mctractable);
+  DeserializeHomog(fin, &tf_robot_calimarkers);
+  DeserializeHomog(fin, &tf_mctractable_obj);
+}
+
+void ObjectReg::DeserializeHomog(std::istream& fin, HomogTransf* tf) {
+  double tf_mat[4][4];
+  for (int i = 0; i < 4; ++i) {
+    for (int j = 0; j < 4; ++j) {
+      fin >> tf_mat[i][j];
+    }
+  }
+  *tf = HomogTransf(tf_mat);
+}
+
+void ObjectReg::SerializeHomog(std::ostream& fout, const HomogTransf& tf) {
+  assert(tf.nn == 4 && tf.mm == 4);
+  for (int i = 0; i < tf.nn; ++i) {
+    for (int j = 0; j < tf.mm; ++j) {
+      fout << tf[i][j]<< " ";
+    }
+    fout << std::endl;
+  }
 }
 
 void ObjectReg::ReadCaliMarkersFromMocap(MocapComm& mocap_comm) {
@@ -74,14 +118,54 @@ void ObjectReg::FormCaliMarkerCoordinateFrame() {
   tf_robot_calimarkers.setTranslation(trans);
 }
 
-
-void ReadTractablePoseFromMocap(MocapComm& mocap_comm) {
+void ObjectReg::ReadTractablePoseFromMocap(MocapComm& mocap_comm) {
+  Mocap::mocap_frame mocap_msg;
+  mocap_comm.GetMocapFrame(&mocap_msg);
+  // We are assuming during registration process, there is only one tractable in view.
+  assert(mocap_msg.body_poses.poses.size() == 1);
+  // Extract pose from mocap output.
+  double tractable_pose[7];
+  geometry_msgs::Pose pose = mocap_msg.body_poses.poses[0];
+  tractable_pose[0] = pose.position.x;
+  tractable_pose[1] = pose.position.y;
+  tractable_pose[2] = pose.position.z;
+  tractable_pose[3] = pose.orientation.x;
+  tractable_pose[4] = pose.orientation.y;
+  tractable_pose[5] = pose.orientation.z;
+  tractable_pose[6] = pose.orientation.w;
+  // Update the tf.
+  tf_robot_mctractable.setPose(tractable_pose);
 }
 
-void ComputeTransformation() {
+void ObjectReg::ComputeTransformation() {
+  tf_mctractable_obj = tf_robot_mctractable.inv() * tf_robot_calimarkers;
 }
 
 
 int main(int argc, char* argv[]) {
+  ros::init(argc, argv, "ObjectRegistration");
+  ros::NodeHandle np;
+  MocapComm mocap_comm(&np);
+  ObjectReg obj_reg;
+  // Shell based interactive process.
+  std::cout << "Object Registration Process Starts. Remeber to calibrate mocap frame to robot base frame first." << std::endl;
+  std::cout << "Place JUST the paper cali markers on the table." << std::endl;
+  std::cout << "Input Object Name" << std::endl;
+  std::string name;
+  std::cin >> name;
+  obj_reg.SetObjName(name);
+  
+  std::cout << "Setting Up Cali Marker Frame" << std::endl;
+  //std::cout << "Enter any key to start acquiring" << std::endl;
+  system("Pause");
+  obj_reg.ReadCaliMarkersFromMocap(mocap_comm);
+  
+  std::cout << "Now put the object on the paper." << std::endl;
+  system("Pause");
+  obj_reg.ReadTractablePoseFromMocap(mocap_comm);
+  
+  std::cout << "Computing transformation." << std::endl;
+  obj_reg.ComputeTransformation();
+  std::cout << obj_reg.GetTransformation() << std::endl;
   return 0;
 }

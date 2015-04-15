@@ -2,10 +2,12 @@
 #define OBJ_REJ_H
 
 // This header file defines the object registration class.
-// ObjectReg instance contains two mocap readings to register the object.
+// ObjectReg instance contains  mocap readings and 
+// computed transformations to register the object.
 
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <assert.h>
 #include <Mocap/mocap_comm.h>
 #include <Mocap/mocap_frame.h>
@@ -23,10 +25,24 @@ class ObjectReg {
   
   void ComputeTransformation();
 
+  const HomogTransf GetTransformation() {
+    return tf_mctractable_obj;
+  }
+  const std::string GetObjName() {
+    return obj_name;
+  }
+  void SetObjName(std::string name) {
+    obj_name = name;
+  }
+
  private:
   // Compute the tf_robot_calimarkers from calibration marker point mocap readings.
   void FormCaliMarkerCoordinateFrame();
+
+  void SerializeHomog(std::ostream& fout, const HomogTransf& tf);
+  void DeserializeHomog(std::istream& fin, HomogTransf* tf);
   
+  std::string obj_name;
   std::vector<Vec> cali_markers_pos;
 
   // Transformation from robot base to motion capture tractable.
